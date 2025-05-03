@@ -19,107 +19,134 @@
             align-items: center;
             z-index: 1000;
         }
+        #debug {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1001;
+        }
         .arjs-loader { display: none !important; }
     </style>
 </head>
 <body>
     <div id="loading">
         <h2>Loading AR Experience</h2>
-        <p id="status">Initializing...</p>
+        <p id="status">Initializing camera...</p>
     </div>
 
+    <div id="debug"></div>
+
     <a-scene 
-        <a-scene
-        arjs="trackingMethod: best; patternRatio: 0.5;"
-        device-orientation-permission-ui="enabled: true"
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
         renderer="logarithmicDepthBuffer: true; precision: high;"
     >
-        <!-- Marker-based camera (for movement tracking) -->
-        <a-nft
-            type="nft"
-            url="https://arjs-cors-proxy.herokuapp.com/https://raw.githack.com/AR-js-org/AR.js/master/data/dataNFT/pinball/"
-            smooth="true"
-            smoothCount="10"
-            smoothTolerance="0.01"
-            smoothThreshold="5"
-        >
-            <a-entity id="object-container" position="0 0 0" scale="0.1 0.1 0.1">
-                <!-- Your AR object will be placed here -->
-            </a-entity>
-        </a-nft>
+        <!-- Main camera -->
+        <a-camera gps-camera rotation-reader></a-camera>
 
-        <!-- Fallback camera (if marker tracking fails) -->
-        <a-entity id="device-camera" camera position="0 0 0"></a-entity>
+        <!-- Object anchor -->
+        <a-entity id="ar-object" position="0 0 -2" scale="0.1 0.1 0.1">
+            <!-- Object will be placed here -->
+        </a-entity>
 
         <script>
+            // Debugging output
+            const debug = document.getElementById('debug');
+            function log(message) {
+                debug.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+                console.log(message);
+            }
+
             document.addEventListener('DOMContentLoaded', () => {
                 const loading = document.getElementById('loading');
                 const status = document.getElementById('status');
-                
+                const scene = document.querySelector('a-scene');
+                const arObject = document.getElementById('ar-object');
+
                 try {
+                    // Parse URL parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
                     
+                    log("Scene initialized");
+                    log(`User agent: ${navigator.userAgent}`);
+
                     if (data.length === 0) {
-                        status.textContent = 'No AR data provided';
+                        showError("No AR data provided");
                         return;
                     }
 
-                    const container = document.getElementById('object-container');
                     const obj = data[0];
-                    
-                    // Load 3D model
-                    container.setAttribute('gltf-model', `url(${obj.file_url})`);
-                    
-                    // Position at eye level (1.5m) and 2m in front
-                    container.setAttribute('position', '0 1.5 -2');
-                    
-                    // Make object interactive
-                    container.setAttribute('rotation', '0 180 0'); // Face camera initially
-                    container.setAttribute('class', 'clickable');
-                    container.setAttribute('shadow', 'receive: true');
+                    log(`Loading object: ${obj.title || 'Untitled'}`);
+                    log(`Model URL: ${obj.file_url}`);
 
-                    // Enable device motion tracking
-                    const camera = document.getElementById('device-camera');
-                    camera.setAttribute('movement-controls', {
-                        controls: 'gamepad, touch, mouse',
-                        sensitivity: 0.5,
-                        fly: false
+                    // 1. Set up model
+                    arObject.setAttribute('gltf-model', {
+                        src: `url(${obj.file_url})`,
+                        normalize: true,
+                        fitToBox: true
                     });
 
-                    // Handle model loading
-                    container.addEventListener('model-loaded', () => {
-                        loading.style.display = 'none';
+                    // 2. Configure position (2m in front, 1.5m eye level)
+                    arObject.setAttribute('position', '0 1.5 -2');
+                    
+                    // 3. Set up event listeners
+                    arObject.addEventListener('model-loaded', (e) => {
+                        log("3D model loaded successfully");
                         
-                        // Scale to reasonable size
-                        const box = new THREE.Box3().setFromObject(container.object3D);
+                        // Auto-scale the model
+                        const box = new THREE.Box3().setFromObject(e.detail.model);
                         const size = box.getSize(new THREE.Vector3());
                         const maxDim = Math.max(size.x, size.y, size.z);
-                        const scale = 1 / maxDim;
+                        const scale = 0.5 / maxDim; // Normalize to 0.5m max dimension
                         
-                        container.setAttribute('scale', {
-                            x: scale * 0.5,
-                            y: scale * 0.5,
-                            z: scale * 0.5
+                        arObject.setAttribute('scale', {
+                            x: scale,
+                            y: scale,
+                            z: scale
                         });
+                        
+                        loading.style.display = 'none';
+                        log(`Object scaled to ${scale.toFixed(2)}x`);
                     });
 
-                    // Handle tracking lost/regained
-                    window.addEventListener('arjs-nft-loaded', () => {
-                        status.textContent = 'Marker tracking activated';
+                    arObject.addEventListener('error', (e) => {
+                        showError(`Model failed to load: ${e.detail.message}`);
                     });
 
-                    window.addEventListener('arjs-nft-error', () => {
-                        status.textContent = 'Using device motion tracking';
+                    // 4. Handle scene events
+                    scene.addEventListener('arjs-unsupported', () => {
+                        showError("AR.js not supported on this device");
+                    });
+
+                    scene.addEventListener('arjs-camera-init', () => {
+                        log("AR camera initialized");
                     });
 
                 } catch (e) {
-                    status.textContent = `Error: ${e.message}`;
+                    showError(`Initialization error: ${e.message}`);
                     console.error(e);
                 }
             });
+
+            function showError(message) {
+                const loading = document.getElementById('loading');
+                loading.innerHTML = `
+                    <h2 style="color: #ff4444">Error</h2>
+                    <p>${message}</p>
+                    <button onclick="window.location.reload()" 
+                            style="padding: 10px 20px; margin-top: 20px; 
+                                   background: #444; color: white; border: none; border-radius: 5px;">
+                        Try Again
+                    </button>
+                `;
+                log(`ERROR: ${message}`);
+            }
         </script>
     </a-scene>
 </body>
