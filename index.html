@@ -18,7 +18,7 @@
           const entity = document.createElement('a-entity');
           entity.setAttribute('gps-entity-place', `latitude: ${obj.latitude}; longitude: ${obj.longitude};`);
           entity.setAttribute('gltf-model', obj.file_url);
-          entity.setAttribute('scale', '10 10 10');
+          entity.setAttribute('scale', '1 1 1');
           entity.setAttribute('look-at', '[gps-camera]');
           document.querySelector('a-scene').appendChild(entity);
 
