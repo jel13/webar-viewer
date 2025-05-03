@@ -1,56 +1,108 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <title>WebAR Viewer</title>
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://cdn.rawgit.com/jeromeetienne/AR.js/2.2.1/aframe/build/aframe-ar.min.js"></script>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-      <a-entity camera gps-camera rotation-reader></a-entity>
-
-      <script>
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
-          
-          if (data.length === 0) {
-            document.body.innerHTML = '<div style="color: white; background: black; height: 100vh; display: flex; justify-content: center; align-items: center;">No AR data provided</div>';
-          }
-
-          data.forEach(obj => {
-            const entity = document.createElement('a-entity');
-            entity.setAttribute('gps-entity-place', `latitude: ${obj.latitude}; longitude: ${obj.longitude};`);
-            
-            // Handle different model types
-            if (obj.file_url.endsWith('.glb') || obj.file_url.endsWith('.gltf')) {
-              entity.setAttribute('gltf-model', `url(${obj.file_url})`);
-            } else if (obj.file_url.endsWith('.usdz')) {
-              // USDZ would need different handling (iOS only)
-              console.warn('USDZ models require iOS and different implementation');
-            }
-            
-            entity.setAttribute('scale', '1 1 1');
-            entity.setAttribute('look-at', '[gps-camera]');
-            
-            // Add label if title exists
-            if (obj.title) {
-              const text = document.createElement('a-text');
-              text.setAttribute('value', obj.title);
-              text.setAttribute('look-at', '[gps-camera]');
-              text.setAttribute('scale', '5 5 5');
-              text.setAttribute('position', '0 1.5 0');
-              text.setAttribute('color', 'white');
-              text.setAttribute('align', 'center');
-              entity.appendChild(text);
-            }
-            
-            document.querySelector('a-scene').appendChild(entity);
-          });
-        } catch (e) {
-          document.body.innerHTML = `<div style="color: white; background: black; height: 100vh; display: flex; justify-content: center; align-items: center;">Error loading AR: ${e.message}</div>`;
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
-      </script>
+    </style>
+</head>
+<body>
+    <div id="loading">Initializing AR...</div>
+    
+    <a-scene 
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; debugUIEnabled: false;"
+        renderer="logarithmicDepthBuffer: true;"
+    >
+        <!-- Debugging Helpers -->
+        <a-entity gps-debug></a-entity>
+        
+        <a-camera gps-camera rotation-reader></a-camera>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
+                    
+                    if (data.length === 0) {
+                        document.getElementById('loading').innerHTML = 'No AR data provided';
+                        return;
+                    }
+
+                    let objectsLoaded = 0;
+                    
+                    data.forEach((obj, index) => {
+                        const entity = document.createElement('a-entity');
+                        
+                        // Position the object
+                        entity.setAttribute('gps-entity-place', `
+                            latitude: ${obj.latitude}; 
+                            longitude: ${obj.longitude};
+                            altitude: 0;
+                        `);
+                        
+                        // Load model
+                        if (obj.file_url) {
+                            entity.setAttribute('gltf-model', `url(${obj.file_url})`);
+                            entity.setAttribute('scale', '0.5 0.5 0.5');
+                        }
+                        
+                        // Add label
+                        if (obj.title) {
+                            const text = document.createElement('a-text');
+                            text.setAttribute('value', obj.title);
+                            text.setAttribute('align', 'center');
+                            text.setAttribute('position', '0 1.5 0');
+                            text.setAttribute('scale', '3 3 3');
+                            text.setAttribute('color', 'white');
+                            entity.appendChild(text);
+                        }
+                        
+                        // Event listeners for debugging
+                        entity.addEventListener('loaded', () => {
+                            console.log(`Object ${index} loaded at:`, entity.getAttribute('position'));
+                            objectsLoaded++;
+                            if (objectsLoaded === data.length) {
+                                document.getElementById('loading').style.display = 'none';
+                            }
+                        });
+                        
+                        entity.addEventListener('error', (e) => {
+                            console.error(`Error loading object ${index}:`, e);
+                        });
+                        
+                        document.querySelector('a-scene').appendChild(entity);
+                    });
+                    
+                    // Timeout in case models fail to load
+                    setTimeout(() => {
+                        if (objectsLoaded < data.length) {
+                            document.getElementById('loading').innerHTML = 
+                                `Loaded ${objectsLoaded}/${data.length} objects. Move around to locate them.`;
+                        }
+                    }, 5000);
+                    
+                } catch (e) {
+                    document.getElementById('loading').innerHTML = `Error: ${e.message}`;
+                    console.error(e);
+                }
+            });
+        </script>
     </a-scene>
-  </body>
+</body>
 </html>
