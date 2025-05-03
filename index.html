@@ -46,122 +46,51 @@
     
     <div id="debug-info"></div>
     
-    <a-scene 
-        vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true; precision: high;"
-    >
-        <a-entity gps-debug></a-entity>
-        <a-camera gps-camera rotation-reader></a-camera>
-
-        <script>
-            // DOM elements
-            const loadingElement = document.getElementById('loading');
-            const progressBar = loadingElement.querySelector('progress');
-            const statusElement = document.getElementById('status');
-            const debugInfo = document.getElementById('debug-info');
-            
-            // Configuration
-            const DEFAULT_SCALE = '1 1 1';
-            const MIN_DISTANCE = 5; // Minimum distance in meters
-            const LABEL_HEIGHT = 1.5; // Height above object in meters
-            
-            // Main initialization
-            document.addEventListener('DOMContentLoaded', async () => {
-                try {
-                    // Parse URL parameters
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
-                    
-                    if (data.length === 0) {
-                        showError('No AR data provided');
-                        return;
-                    }
-                    
-                    // Load each AR object
-                    let loadedCount = 0;
-                    const totalObjects = data.length;
-                    
-                    data.forEach((obj, index) => {
-                        statusElement.textContent = `Loading object ${index + 1}/${totalObjects}...`;
-                        progressBar.value = (index / totalObjects) * 100;
-                        
-                        const entity = document.createElement('a-entity');
-                        entity.setAttribute('gps-entity-place', `
-                            latitude: ${obj.latitude}; 
-                            longitude: ${obj.longitude};
-                            altitude: 0;
-                        `);
-                        
-                        // Load 3D model
-                        if (obj.file_url) {
-                            entity.setAttribute('gltf-model', `url(${obj.file_url})`);
-                            entity.setAttribute('scale', DEFAULT_SCALE);
-                            entity.setAttribute('shadow', 'receive: true');
-                        }
-                        
-                        // Add label
-                        if (obj.title) {
-                            const text = document.createElement('a-text');
-                            text.setAttribute('value', obj.title);
-                            text.setAttribute('align', 'center');
-                            text.setAttribute('position', `0 ${LABEL_HEIGHT} 0`);
-                            text.setAttribute('scale', '3 3 3');
-                            text.setAttribute('color', 'white');
-                            text.setAttribute('background', 'color: #333; opacity: 0.7; padding: 0.2;');
-                            entity.appendChild(text);
-                        }
-                        
-                        // Debug info
-                        const distance = obj.original_distance ? 
-                            `Originally ${obj.original_distance.toFixed(1)}m away` : 
-                            'Distance unknown';
-                        
-                        entity.addEventListener('loaded', () => {
-                            loadedCount++;
-                            progressBar.value = (loadedCount / totalObjects) * 100;
-                            
-                            const pos = entity.getAttribute('position');
-                            debugInfo.innerHTML += `
-                                <div>Loaded: ${obj.title}</div>
-                                <div>Position: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}</div>
-                                <div>${distance}</div><hr>
-                            `;
-                            
-                            if (loadedCount === totalObjects) {
-                                loadingElement.style.display = 'none';
-                            }
-                        });
-                        
-                        entity.addEventListener('error', (e) => {
-                            console.error(`Error loading object ${index}:`, e);
-                            debugInfo.innerHTML += `<div style="color:red">Failed to load: ${obj.title}</div>`;
-                        });
-                        
-                        document.querySelector('a-scene').appendChild(entity);
-                    });
-                    
-                    // Timeout fallback
-                    setTimeout(() => {
-                        if (loadedCount < totalObjects) {
-                            statusElement.textContent = `Loaded ${loadedCount}/${totalObjects} objects. Move around to locate them.`;
-                        }
-                    }, 10000);
-                    
-                } catch (e) {
-                    showError(`Error: ${e.message}`);
-                    console.error(e);
-                }
-            });
-            
-            function showError(message) {
-                loadingElement.innerHTML = `
-                    <h2 style="color: #ff4444">Error</h2>
-                    <p>${message}</p>
-                    <button onclick="window.location.reload()">Try Again</button>
-                `;
-            }
-        </script>
-    </a-scene>
+    <a-scene vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false;">
+  <a-camera gps-camera rotation-reader></a-camera>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
+      
+      data.forEach(obj => {
+        const entity = document.createElement('a-entity');
+        
+        // Use offset placement if available
+        if (obj.offset_x !== undefined) {
+          entity.setAttribute('position', {
+            x: obj.offset_x,
+            y: obj.offset_z || 0, // Height adjustment
+            z: obj.offset_y // Note: z and y are swapped in 3D space
+          });
+        } else {
+          // Fallback to GPS placement
+          entity.setAttribute('gps-entity-place', `
+            latitude: ${obj.latitude};
+            longitude: ${obj.longitude};
+          `);
+        }
+        
+        // Load model
+        entity.setAttribute('gltf-model', `url(${obj.file_url})`);
+        entity.setAttribute('scale', obj.scale || '1 1 1');
+        entity.setAttribute('look-at', '[gps-camera]');
+        
+        // Add label if available
+        if (obj.title) {
+          const text = document.createElement('a-text');
+          text.setAttribute('value', obj.title);
+          text.setAttribute('position', '0 2 0');
+          text.setAttribute('scale', '3 3 3');
+          text.setAttribute('color', 'white');
+          entity.appendChild(text);
+        }
+        
+        document.querySelector('a-scene').appendChild(entity);
+      });
+    });
+  </script>
+</a-scene>
 </body>
 </html>
