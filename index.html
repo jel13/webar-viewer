@@ -2,22 +2,15 @@
 <html>
 <head>
     <title>WebAR Viewer</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-        }
-        #loading-overlay {
+        body { margin: 0; overflow: hidden; }
+        #loading {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
             color: white;
             display: flex;
             flex-direction: column;
@@ -25,184 +18,94 @@
             align-items: center;
             z-index: 1000;
         }
-        #loading-message {
-            margin-top: 20px;
-            font-size: 18px;
-        }
-        #debug-panel {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            z-index: 1001;
-            max-width: 300px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .arjs-loader {
-            display: none !important;
-        }
     </style>
 </head>
 <body>
-    <div id="loading-overlay">
-        <div class="loader"></div>
-        <div id="loading-message">Initializing AR...</div>
+    <div id="loading">
+        <h2>Loading AR Experience</h2>
+        <p id="status">Initializing...</p>
     </div>
-
-    <div id="debug-panel"></div>
 
     <a-scene 
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true; precision: high;"
+        arjs="sourceType: webcam; debugUIEnabled: false;"
+        renderer="logarithmicDepthBuffer: true;"
     >
-        <a-assets>
-            <!-- Preload assets if needed -->
-        </a-assets>
-
-        <a-camera gps-camera rotation-reader></a-camera>
+        <a-camera gps-camera rotation-reader>
+            <!-- We'll place objects relative to camera -->
+        </a-camera>
 
         <script>
-            // DOM elements
-            const loadingOverlay = document.getElementById('loading-overlay');
-            const loadingMessage = document.getElementById('loading-message');
-            const debugPanel = document.getElementById('debug-panel');
-
-            // Configuration
-            const DEFAULT_SCALE = '0.5 0.5 0.5';
-            const LABEL_HEIGHT = 1.5; // meters above object
-            const LABEL_SCALE = '2 2 2';
-
-            // Main initialization
             document.addEventListener('DOMContentLoaded', () => {
+                const loading = document.getElementById('loading');
+                const status = document.getElementById('status');
+                
                 try {
-                    // Parse URL parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
                     
                     if (data.length === 0) {
-                        showError('No AR data provided');
+                        status.textContent = 'No AR data provided';
                         return;
                     }
 
-                    // Add debug info
-                    addDebugInfo(`Loading ${data.length} AR object(s)`);
-                    addDebugInfo(`User Agent: ${navigator.userAgent}`);
-
-                    let objectsLoaded = 0;
-                    const scene = document.querySelector('a-scene');
-
                     data.forEach((obj, index) => {
-                        loadingMessage.textContent = `Loading object ${index + 1}/${data.length}...`;
+                        status.textContent = `Loading object ${index + 1}`;
                         
                         const entity = document.createElement('a-entity');
-                        entity.setAttribute('id', `ar-object-${index}`);
                         
-                        // Use offset placement if available (preferred method)
-                        if (obj.offset_x !== undefined) {
-                            entity.setAttribute('position', {
-                                x: parseFloat(obj.offset_x) || 0,
-                                y: parseFloat(obj.offset_z) || -1.5, // Default eye level
-                                z: parseFloat(obj.offset_y) || -5 // Default 5m in front
-                            });
-                            addDebugInfo(`Object ${index}: Using offset placement`);
-                        } 
-                        // Fallback to GPS placement
-                        else if (obj.latitude && obj.longitude) {
-                            entity.setAttribute('gps-entity-place', `
-                                latitude: ${obj.latitude};
-                                longitude: ${obj.longitude};
-                                altitude: ${obj.altitude || 0};
-                            `);
-                            addDebugInfo(`Object ${index}: Using GPS placement`);
+                        // Set position relative to camera
+                        if (obj.position) {
+                            entity.setAttribute('position', obj.position);
                         } else {
-                            addDebugInfo(`Object ${index}: No valid placement data`, true);
-                            return;
+                            // Default position: 5m in front, 1.5m height
+                            entity.setAttribute('position', {
+                                x: 0,
+                                y: -1.5,
+                                z: -5
+                            });
                         }
 
-                        // Load 3D model
-                        if (obj.file_url) {
-                            entity.setAttribute('gltf-model', `url(${obj.file_url})`);
-                            entity.setAttribute('scale', obj.scale || DEFAULT_SCALE);
-                            entity.setAttribute('shadow', 'receive: true');
-                            
-                            // Add loading events
-                            entity.addEventListener('model-loaded', () => {
-                                objectsLoaded++;
-                                updateLoadingStatus(objectsLoaded, data.length);
-                                addDebugInfo(`Model ${index} loaded successfully`);
-                            });
-                            
-                            entity.addEventListener('error', (e) => {
-                                addDebugInfo(`Error loading model ${index}: ${e.detail.message}`, true);
-                            });
-                        }
+                        // Load model
+                        entity.setAttribute('gltf-model', `url(${obj.file_url})`);
+                        entity.setAttribute('scale', obj.scale || '0.5 0.5 0.5');
+                        
+                        // Add distance controls
+                        let currentDistance = Math.abs(obj.position?.z || 5);
+                        const minDistance = obj.min_distance || 2;
+                        const maxDistance = obj.max_distance || 10;
+                        
+                        // Make draggable for distance adjustment
+                        entity.setAttribute('draggable', {
+                            distanceStep: 0.1,
+                            minDistance: minDistance,
+                            maxDistance: maxDistance
+                        });
 
                         // Add label
                         if (obj.title) {
                             const text = document.createElement('a-text');
                             text.setAttribute('value', obj.title);
-                            text.setAttribute('align', 'center');
-                            text.setAttribute('position', `0 ${LABEL_HEIGHT} 0`);
-                            text.setAttribute('scale', LABEL_SCALE);
+                            text.setAttribute('position', '0 1.5 0');
+                            text.setAttribute('scale', '2 2 2');
                             text.setAttribute('color', 'white');
-                            text.setAttribute('background', 'color: #333; opacity: 0.8; padding: 0.2;');
-                            text.setAttribute('look-at', '[gps-camera]');
+                            text.setAttribute('align', 'center');
                             entity.appendChild(text);
                         }
 
-                        // Make object always face camera
-                        entity.setAttribute('look-at', '[gps-camera]');
-                        
-                        scene.appendChild(entity);
-                    });
+                        entity.addEventListener('loaded', () => {
+                            loading.style.display = 'none';
+                            console.log('Object loaded at:', entity.getAttribute('position'));
+                        });
 
-                    // Hide loading when scene is ready
-                    scene.addEventListener('loaded', () => {
-                        setTimeout(() => {
-                            if (objectsLoaded > 0) {
-                                loadingOverlay.style.display = 'none';
-                            } else {
-                                showError('No AR objects could be loaded');
-                            }
-                        }, 2000);
+                        document.querySelector('a-scene').appendChild(entity);
                     });
-
+                    
                 } catch (e) {
-                    showError(`Initialization error: ${e.message}`);
+                    status.textContent = `Error: ${e.message}`;
                     console.error(e);
                 }
             });
-
-            // Helper functions
-            function updateLoadingStatus(loaded, total) {
-                loadingMessage.textContent = `Loaded ${loaded}/${total} objects...`;
-            }
-
-            function addDebugInfo(message, isError = false) {
-                const div = document.createElement('div');
-                div.textContent = message;
-                div.style.color = isError ? '#ff8888' : 'white';
-                debugPanel.appendChild(div);
-                debugPanel.scrollTop = debugPanel.scrollHeight;
-                console.log(message);
-            }
-
-            function showError(message) {
-                loadingOverlay.innerHTML = `
-                    <h2 style="color: #ff4444">Error</h2>
-                    <p>${message}</p>
-                    <button onclick="window.location.reload()" 
-                            style="padding: 10px 20px; background: #444; color: white; border: none; border-radius: 5px;">
-                        Try Again
-                    </button>
-                `;
-            }
         </script>
     </a-scene>
 </body>
