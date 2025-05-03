@@ -11,55 +11,93 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: black;
+            background: rgba(0, 0, 0, 0.8);
             color: white;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            font-family: Arial, sans-serif;
+        }
+        #loading progress {
+            width: 80%;
+            margin: 20px;
+        }
+        #debug-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1001;
         }
     </style>
 </head>
 <body>
-    <div id="loading">Initializing AR...</div>
+    <div id="loading">
+        <h2>Loading AR Experience</h2>
+        <progress value="0" max="100"></progress>
+        <p id="status">Initializing...</p>
+    </div>
+    
+    <div id="debug-info"></div>
     
     <a-scene 
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false;"
-        renderer="logarithmicDepthBuffer: true;"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        renderer="logarithmicDepthBuffer: true; precision: high;"
     >
-        <!-- Debugging Helpers -->
         <a-entity gps-debug></a-entity>
-        
         <a-camera gps-camera rotation-reader></a-camera>
 
         <script>
-            document.addEventListener('DOMContentLoaded', () => {
+            // DOM elements
+            const loadingElement = document.getElementById('loading');
+            const progressBar = loadingElement.querySelector('progress');
+            const statusElement = document.getElementById('status');
+            const debugInfo = document.getElementById('debug-info');
+            
+            // Configuration
+            const DEFAULT_SCALE = '1 1 1';
+            const MIN_DISTANCE = 5; // Minimum distance in meters
+            const LABEL_HEIGHT = 1.5; // Height above object in meters
+            
+            // Main initialization
+            document.addEventListener('DOMContentLoaded', async () => {
                 try {
+                    // Parse URL parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
                     
                     if (data.length === 0) {
-                        document.getElementById('loading').innerHTML = 'No AR data provided';
+                        showError('No AR data provided');
                         return;
                     }
-
-                    let objectsLoaded = 0;
+                    
+                    // Load each AR object
+                    let loadedCount = 0;
+                    const totalObjects = data.length;
                     
                     data.forEach((obj, index) => {
-                        const entity = document.createElement('a-entity');
+                        statusElement.textContent = `Loading object ${index + 1}/${totalObjects}...`;
+                        progressBar.value = (index / totalObjects) * 100;
                         
-                        // Position the object
+                        const entity = document.createElement('a-entity');
                         entity.setAttribute('gps-entity-place', `
                             latitude: ${obj.latitude}; 
                             longitude: ${obj.longitude};
                             altitude: 0;
                         `);
                         
-                        // Load model
+                        // Load 3D model
                         if (obj.file_url) {
                             entity.setAttribute('gltf-model', `url(${obj.file_url})`);
-                            entity.setAttribute('scale', '0.5 0.5 0.5');
+                            entity.setAttribute('scale', DEFAULT_SCALE);
+                            entity.setAttribute('shadow', 'receive: true');
                         }
                         
                         // Add label
@@ -67,41 +105,62 @@
                             const text = document.createElement('a-text');
                             text.setAttribute('value', obj.title);
                             text.setAttribute('align', 'center');
-                            text.setAttribute('position', '0 1.5 0');
+                            text.setAttribute('position', `0 ${LABEL_HEIGHT} 0`);
                             text.setAttribute('scale', '3 3 3');
                             text.setAttribute('color', 'white');
+                            text.setAttribute('background', 'color: #333; opacity: 0.7; padding: 0.2;');
                             entity.appendChild(text);
                         }
                         
-                        // Event listeners for debugging
+                        // Debug info
+                        const distance = obj.original_distance ? 
+                            `Originally ${obj.original_distance.toFixed(1)}m away` : 
+                            'Distance unknown';
+                        
                         entity.addEventListener('loaded', () => {
-                            console.log(`Object ${index} loaded at:`, entity.getAttribute('position'));
-                            objectsLoaded++;
-                            if (objectsLoaded === data.length) {
-                                document.getElementById('loading').style.display = 'none';
+                            loadedCount++;
+                            progressBar.value = (loadedCount / totalObjects) * 100;
+                            
+                            const pos = entity.getAttribute('position');
+                            debugInfo.innerHTML += `
+                                <div>Loaded: ${obj.title}</div>
+                                <div>Position: ${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}</div>
+                                <div>${distance}</div><hr>
+                            `;
+                            
+                            if (loadedCount === totalObjects) {
+                                loadingElement.style.display = 'none';
                             }
                         });
                         
                         entity.addEventListener('error', (e) => {
                             console.error(`Error loading object ${index}:`, e);
+                            debugInfo.innerHTML += `<div style="color:red">Failed to load: ${obj.title}</div>`;
                         });
                         
                         document.querySelector('a-scene').appendChild(entity);
                     });
                     
-                    // Timeout in case models fail to load
+                    // Timeout fallback
                     setTimeout(() => {
-                        if (objectsLoaded < data.length) {
-                            document.getElementById('loading').innerHTML = 
-                                `Loaded ${objectsLoaded}/${data.length} objects. Move around to locate them.`;
+                        if (loadedCount < totalObjects) {
+                            statusElement.textContent = `Loaded ${loadedCount}/${totalObjects} objects. Move around to locate them.`;
                         }
-                    }, 5000);
+                    }, 10000);
                     
                 } catch (e) {
-                    document.getElementById('loading').innerHTML = `Error: ${e.message}`;
+                    showError(`Error: ${e.message}`);
                     console.error(e);
                 }
             });
+            
+            function showError(message) {
+                loadingElement.innerHTML = `
+                    <h2 style="color: #ff4444">Error</h2>
+                    <p>${message}</p>
+                    <button onclick="window.location.reload()">Try Again</button>
+                `;
+            }
         </script>
     </a-scene>
 </body>
