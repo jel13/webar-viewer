@@ -6,31 +6,51 @@
     <script src="https://cdn.rawgit.com/jeromeetienne/AR.js/2.2.1/aframe/build/aframe-ar.min.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam;">
-
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
       <a-entity camera gps-camera rotation-reader></a-entity>
 
       <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
+          
+          if (data.length === 0) {
+            document.body.innerHTML = '<div style="color: white; background: black; height: 100vh; display: flex; justify-content: center; align-items: center;">No AR data provided</div>';
+          }
 
-        data.forEach(obj => {
-          const entity = document.createElement('a-entity');
-          entity.setAttribute('gps-entity-place', `latitude: ${obj.latitude}; longitude: ${obj.longitude};`);
-          entity.setAttribute('gltf-model', obj.file_url);
-          entity.setAttribute('scale', '1 1 1');
-          entity.setAttribute('look-at', '[gps-camera]');
-          document.querySelector('a-scene').appendChild(entity);
-
-          const text = document.createElement('a-text');
-          text.setAttribute('value', obj.title);
-          text.setAttribute('look-at', '[gps-camera]');
-          text.setAttribute('scale', '10 10 10');
-          text.setAttribute('position', '0 2 0');
-          entity.appendChild(text);
-        });
+          data.forEach(obj => {
+            const entity = document.createElement('a-entity');
+            entity.setAttribute('gps-entity-place', `latitude: ${obj.latitude}; longitude: ${obj.longitude};`);
+            
+            // Handle different model types
+            if (obj.file_url.endsWith('.glb') || obj.file_url.endsWith('.gltf')) {
+              entity.setAttribute('gltf-model', `url(${obj.file_url})`);
+            } else if (obj.file_url.endsWith('.usdz')) {
+              // USDZ would need different handling (iOS only)
+              console.warn('USDZ models require iOS and different implementation');
+            }
+            
+            entity.setAttribute('scale', '1 1 1');
+            entity.setAttribute('look-at', '[gps-camera]');
+            
+            // Add label if title exists
+            if (obj.title) {
+              const text = document.createElement('a-text');
+              text.setAttribute('value', obj.title);
+              text.setAttribute('look-at', '[gps-camera]');
+              text.setAttribute('scale', '5 5 5');
+              text.setAttribute('position', '0 1.5 0');
+              text.setAttribute('color', 'white');
+              text.setAttribute('align', 'center');
+              entity.appendChild(text);
+            }
+            
+            document.querySelector('a-scene').appendChild(entity);
+          });
+        } catch (e) {
+          document.body.innerHTML = `<div style="color: white; background: black; height: 100vh; display: flex; justify-content: center; align-items: center;">Error loading AR: ${e.message}</div>`;
+        }
       </script>
-
     </a-scene>
   </body>
 </html>
