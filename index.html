@@ -85,18 +85,13 @@
                 try {
                     // 1. Parse URL parameters with validation
                     const urlParams = new URLSearchParams(window.location.search);
-                    let data;
+                    const dataStr = decodeURIComponent(urlParams.get('data') || '[]');
                     
+                    let data;
                     try {
-                        const dataStr = decodeURIComponent(urlParams.get('data') || '[]');
-                        // Fix common JSON errors
-                        const sanitized = dataStr
-                            .replace(/"latitude":"([^"]+),/g, '"latitude":$1,')
-                            .replace(/"longitude":([^,]+),/g, '"longitude":$1,');
-                        data = JSON.parse(sanitized);
-                        log("Data parsed successfully");
+                        data = JSON.parse(dataStr);
                     } catch (e) {
-                        throw new Error(`Invalid data format: ${e.message}`);
+                        throw new Error(`Invalid JSON data: ${e.message}`);
                     }
 
                     if (!Array.isArray(data) || data.length === 0) {
@@ -110,14 +105,14 @@
                         throw new Error("Missing file_url in AR data");
                     }
                     
-                    // 3. Verify camera access
-                    navigator.mediaDevices.getUserMedia({ video: true })
+                    // Verify the URL is accessible
+                    checkModelUrl(obj.file_url)
                         .then(() => {
-                            updateStatus("Camera ready - loading model");
+                            updateStatus("Model URL verified");
                             initAR(obj);
                         })
                         .catch(e => {
-                            throw new Error(`Camera access denied: ${e.message}`);
+                            throw new Error(`Model URL check failed: ${e.message}`);
                         });
 
                 } catch (e) {
@@ -127,6 +122,21 @@
                 }
             });
 
+            async function checkModelUrl(url) {
+                try {
+                    const response = await fetch(url, { method: 'HEAD' });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType.includes('model/gltf') && !contentType.includes('application/octet-stream')) {
+                        throw new Error(`Invalid content-type: ${contentType}`);
+                    }
+                } catch (e) {
+                    throw new Error(`Model URL inaccessible: ${e.message}`);
+                }
+            }
+
             function initAR(obj) {
                 const scene = document.querySelector('a-scene');
                 const arObject = document.createElement('a-entity');
@@ -134,33 +144,47 @@
                 arObject.setAttribute('position', '0 1.5 -2');
                 scene.appendChild(arObject);
 
-                // Set timeout for model loading
+                // Set timeout for model loading (60 seconds)
                 const loadTimeout = setTimeout(() => {
-                    throw new Error("Model loading timed out (30 seconds)");
-                }, 30000);
+                    arObject.removeAttribute('gltf-model');
+                    throw new Error("Model loading timed out (60 seconds)");
+                }, 60000);
 
-                // Load 3D model
+                // Load 3D model with progress events
                 arObject.setAttribute('gltf-model', {
                     src: `url(${obj.file_url})`,
                     normalize: true,
-                    timeout: 20000
+                    loader: new THREE.GLTFLoader().setWithCredentials(false),
+                    onProgress: (progress) => {
+                        updateStatus(`Loading model... ${Math.round(progress.loaded/progress.total*100)}%`);
+                    }
                 });
 
                 // Model loaded handler
                 arObject.addEventListener('model-loaded', (e) => {
                     clearTimeout(loadTimeout);
-                    updateStatus("Model loaded - detecting surfaces");
+                    updateStatus("Model loaded - initializing");
                     
-                    // Auto-scale
+                    // Auto-scale with bounds checking
                     const box = new THREE.Box3().setFromObject(e.detail.model);
                     const size = box.getSize(new THREE.Vector3());
                     const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = 1 / Math.max(maxDim, 0.1); // Prevent division by zero
+                    
+                    let scale;
+                    if (maxDim > 100) {
+                        scale = 0.5 / maxDim; // Emergency scaling for huge models
+                        log(`Emergency scaling applied: ${scale.toFixed(6)}`);
+                    } else if (maxDim < 0.01) {
+                        scale = 1 / 0.01; // Scale up tiny models
+                        log(`Small model scaling applied: ${scale.toFixed(2)}`);
+                    } else {
+                        scale = 1 / maxDim;
+                    }
                     
                     arObject.setAttribute('scale', `${scale} ${scale} ${scale}`);
-                    log(`Model scaled to ${scale.toFixed(4)} (original size: ${maxDim.toFixed(2)}m)`);
+                    log(`Final scale: ${scale.toFixed(4)} (original size: ${maxDim.toFixed(2)}m)`);
                     
-                    // Add visual helper
+                    // Add visual bounding box
                     const helper = new THREE.BoxHelper(e.detail.model, 0x00ff00);
                     e.detail.model.add(helper);
                     
@@ -170,11 +194,7 @@
                 // Error handling
                 arObject.addEventListener('error', (e) => {
                     clearTimeout(loadTimeout);
-                    throw new Error(`Model load failed: ${e.detail.message}`);
-                });
-
-                scene.addEventListener('arjs-camera-init', () => {
-                    log("AR camera initialized");
+                    throw new Error(`Model failed to load: ${e.detail.message}`);
                 });
             }
 
