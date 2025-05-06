@@ -33,19 +33,6 @@
             max-height: 30%;
             overflow-y: auto;
         }
-        .progress-container {
-            width: 80%;
-            margin: 20px 0;
-            background: #333;
-            border-radius: 10px;
-        }
-        .progress-bar {
-            height: 10px;
-            background: #4CAF50;
-            border-radius: 10px;
-            width: 0%;
-            transition: width 0.3s;
-        }
         #retry-btn {
             padding: 12px 24px;
             margin-top: 20px;
@@ -63,10 +50,7 @@
     <div id="loading">
         <h2>AR Experience</h2>
         <p id="status">Initializing AR session...</p>
-        <div class="progress-container">
-            <div id="progress" class="progress-bar"></div>
-        </div>
-        <button id="retry-btn">Use Fallback Model</button>
+        <button id="retry-btn">Try Again</button>
     </div>
 
     <div id="debug"></div>
@@ -76,47 +60,39 @@
         arjs="sourceType: webcam; 
                debugUIEnabled: true; 
                detectionMode: mono_and_matrix; 
-               matrixCodeType: 3x3;
-               maxDetectionRate: 30;"
+               matrixCodeType: 3x3;"
         renderer="logarithmicDepthBuffer: true; 
                   precision: high; 
                   antialias: true;"
-        stats
     >
-        <a-assets timeout="60000">
-            <!-- Preloaded fallback assets -->
+        <a-assets>
             <a-asset-item id="fallback-obj" src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@master/assets/models/wooden-crate/wooden-crate.gltf"></a-asset-item>
-            <img id="fallback-texture" src="https://cdn.jsdelivr.net/gh/aframevr/assets@master/360-image-gallery-boilerplate/img/thumb/placeholder.png">
         </a-assets>
 
-        <a-camera gps-camera rotation-reader="enabled: true"></a-camera>
+        <a-camera gps-camera rotation-reader></a-camera>
 
-        <a-entity id="ar-object" position="0 1.5 -2" scale="1 1 1"></a-entity>
+        <a-entity id="ar-object" position="0 1.5 -2"></a-entity>
 
         <script>
-            // Configuration
-            const CONFIG = {
-                maxWaitTime: 60000, // 60 seconds maximum
-                checkInterval: 500, // Check every 500ms
-                requiredFileSize: 50000 // Minimum 50KB file size
-            };
-
-            // State management
-            const state = {
-                loadStartTime: null,
-                lastProgressTime: null,
-                retryCount: 0,
-                maxRetries: 2
-            };
-
-            // DOM elements
+            // Debugging setup
             const debug = document.getElementById('debug');
             const loading = document.getElementById('loading');
             const status = document.getElementById('status');
-            const progress = document.getElementById('progress');
             const retryBtn = document.getElementById('retry-btn');
 
-            // Debug logging
+            // Updated WebGL check for A-Frame 1.4.0
+            function checkWebGLSupport() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    return !!(
+                        window.WebGLRenderingContext &&
+                        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+                    );
+                } catch (e) {
+                    return false;
+                }
+            }
+
             function log(message, isError = false) {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString();
@@ -129,53 +105,58 @@
                 console[isError ? 'error' : 'log'](message);
             }
 
-            function updateStatus(message, progressPercent = null) {
+            function updateStatus(message) {
                 status.textContent = message;
-                if (progressPercent !== null) {
-                    progress.style.width = `${progressPercent}%`;
-                }
                 log(message);
             }
 
             function showRetryButton() {
                 retryBtn.style.display = 'block';
-                retryBtn.onclick = initiateFallback;
+                retryBtn.onclick = () => window.location.reload();
+            }
+
+            function handleFatalError(error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                updateStatus(`Error: ${errorMessage}`);
+                log(`FATAL ERROR: ${errorMessage}`, true);
+                if (error instanceof Error && error.stack) {
+                    log(error.stack, true);
+                }
+                showRetryButton();
             }
 
             // Main initialization
             document.addEventListener('DOMContentLoaded', () => {
-                state.loadStartTime = Date.now();
-                updateStatus("Starting AR session...", 0);
-
-                // Check for WebGL support
-                if (!AFRAME.utils.device.checkWebGLSupport()) {
-                    handleFatalError(new Error("WebGL not supported in this browser"));
-                    return;
-                }
-
                 try {
-                    // Parse and validate URL parameters
+                    updateStatus("Checking system requirements...");
+                    
+                    // 1. Check WebGL support with updated method
+                    if (!checkWebGLSupport()) {
+                        throw new Error("WebGL is not supported in your browser. Please try with a different browser or device.");
+                    }
+
+                    // 2. Parse URL parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     const dataStr = decodeURIComponent(urlParams.get('data') || '[]');
                     
                     let arData;
                     try {
                         arData = JSON.parse(dataStr);
-                        if (!Array.isArray(arData)) throw new Error("Data must be an array");
+                        if (!Array.isArray(arData)) throw new Error("Invalid data format");
                     } catch (e) {
-                        throw new Error(`Invalid JSON data: ${e.message}`);
+                        throw new Error(`Failed to parse AR data: ${e.message}`);
                     }
 
                     if (arData.length === 0) {
-                        throw new Error("No AR data provided in URL parameters");
+                        throw new Error("No AR data provided");
                     }
 
                     const modelData = arData[0];
                     if (!modelData.file_url) {
-                        throw new Error("Missing required file_url parameter");
+                        throw new Error("Missing model URL in data");
                     }
 
-                    // Start the loading process
+                    updateStatus("Initializing AR...");
                     loadModel(modelData.file_url);
 
                 } catch (e) {
@@ -183,217 +164,84 @@
                 }
             });
 
-            async function loadModel(modelUrl) {
-                updateStatus("Verifying model URL...", 5);
-                
-                try {
-                    // First verify the URL
-                    await verifyModelUrl(modelUrl);
-                    
-                    // Then initiate loading
-                    updateStatus("Loading 3D model...", 10);
-                    initModelLoading(modelUrl);
-                    
-                } catch (e) {
-                    log(`Model verification failed: ${e.message}`, true);
-                    initiateFallback();
-                }
-            }
-
-            async function verifyModelUrl(url) {
-                try {
-                    const startTime = Date.now();
-                    log(`Verifying URL: ${url}`);
-                    
-                    const response = await fetch(url, {
-                        method: 'HEAD',
-                        cache: 'no-cache'
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    
-                    // Check content type
-                    const contentType = response.headers.get('content-type') || '';
-                    const validTypes = [
-                        'model/gltf-binary',
-                        'model/gltf+json',
-                        'application/octet-stream'
-                    ];
-                    
-                    if (!validTypes.some(type => contentType.includes(type))) {
-                        throw new Error(`Invalid content-type: ${contentType}`);
-                    }
-                    
-                    // Check file size
-                    const contentLength = response.headers.get('content-length');
-                    if (contentLength && parseInt(contentLength) < CONFIG.requiredFileSize) {
-                        throw new Error(`File too small (${contentLength} bytes)`);
-                    }
-                    
-                    log(`URL verified in ${Date.now() - startTime}ms`);
-                    
-                } catch (e) {
-                    throw new Error(`Model URL verification failed: ${e.message}`);
-                }
-            }
-
-            function initModelLoading(modelUrl) {
+            function loadModel(modelUrl) {
                 const scene = document.querySelector('a-scene');
                 const arObject = document.getElementById('ar-object');
                 
-                // Clear previous model
+                // Clear previous content
                 arObject.innerHTML = '';
                 
-                // Set loading timeout
-                const timeout = setTimeout(() => {
-                    handleLoadTimeout(modelUrl);
-                }, CONFIG.maxWaitTime);
-
-                // Configure loader with progress tracking
+                // Create and configure loader
                 const loader = new THREE.GLTFLoader();
-                let lastProgress = 0;
                 
-                loader.manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-                    const progressPercent = Math.round(itemsLoaded/itemsTotal*100);
-                    if (progressPercent > lastProgress) {
-                        lastProgress = progressPercent;
-                        updateStatus(`Loading model resources...`, progressPercent);
-                        state.lastProgressTime = Date.now();
-                    }
-                };
-
-                // Load the model
                 loader.load(
                     modelUrl,
                     (gltf) => {
-                        clearTimeout(timeout);
-                        handleModelSuccess(gltf);
+                        try {
+                            arObject.object3D.add(gltf.scene);
+                            
+                            // Auto-scaling
+                            const box = new THREE.Box3().setFromObject(gltf.scene);
+                            const size = box.getSize(new THREE.Vector3());
+                            const maxDim = Math.max(size.x, size.y, size.z);
+                            const scale = 1 / Math.max(maxDim, 0.1);
+                            
+                            arObject.setAttribute('scale', `${scale} ${scale} ${scale}`);
+                            log(`Model loaded successfully. Scale: ${scale.toFixed(4)}`);
+                            
+                            loading.style.display = 'none';
+                        } catch (e) {
+                            handleModelError(e);
+                        }
                     },
                     (xhr) => {
                         const percent = Math.round(xhr.loaded / xhr.total * 100);
-                        updateStatus(`Downloading model...`, percent);
-                        state.lastProgressTime = Date.now();
+                        updateStatus(`Loading model... ${percent}%`);
                     },
                     (error) => {
-                        clearTimeout(timeout);
                         handleLoadError(error, modelUrl);
                     }
                 );
             }
 
-            function handleModelSuccess(gltf) {
-                const scene = document.querySelector('a-scene');
-                const arObject = document.getElementById('ar-object');
-                
-                updateStatus("Processing 3D model...", 90);
-                
-                try {
-                    // Add the model to scene
-                    arObject.object3D.add(gltf.scene);
-                    
-                    // Calculate automatic scaling
-                    const box = new THREE.Box3().setFromObject(gltf.scene);
-                    const size = box.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = 1 / Math.max(maxDim, 0.1); // Prevent division by zero
-                    
-                    arObject.setAttribute('scale', `${scale} ${scale} ${scale}`);
-                    log(`Model loaded successfully. Original size: ${maxDim.toFixed(2)}m, Scale: ${scale.toFixed(4)}`);
-                    
-                    // Add debug visualization
-                    const bbox = new THREE.BoxHelper(gltf.scene, 0x00ff00);
-                    bbox.name = 'debug-bbox';
-                    arObject.object3D.add(bbox);
-                    
-                    // Complete loading
-                    updateStatus("AR experience ready", 100);
-                    setTimeout(() => {
-                        loading.style.display = 'none';
-                    }, 500);
-                    
-                } catch (e) {
-                    handleModelError(e);
-                }
-            }
-
             function handleLoadError(error, modelUrl) {
-                log(`Model load error: ${error.message}`, true);
-                log(`Failed URL: ${modelUrl}`, true);
-                
-                if (state.retryCount < state.maxRetries) {
-                    state.retryCount++;
-                    log(`Retrying (attempt ${state.retryCount}/${state.maxRetries})...`);
-                    setTimeout(() => loadModel(modelUrl), 1000);
-                } else {
-                    initiateFallback();
-                }
+                log(`Model load failed: ${error.message}`, true);
+                log(`Attempted URL: ${modelUrl}`, true);
+                loadFallbackModel();
             }
 
-            function handleLoadTimeout(modelUrl) {
-                const elapsed = (Date.now() - state.loadStartTime) / 1000;
-                log(`Model loading timed out after ${elapsed.toFixed(1)} seconds`, true);
-                
-                if (state.retryCount < state.maxRetries) {
-                    state.retryCount++;
-                    log(`Retrying (attempt ${state.retryCount}/${state.maxRetries})...`);
-                    loadModel(modelUrl);
-                } else {
-                    initiateFallback();
-                }
+            function handleModelError(error) {
+                log(`Model processing error: ${error.message}`, true);
+                loadFallbackModel();
             }
 
-            function initiateFallback() {
-                updateStatus("Loading fallback model...", 50);
+            function loadFallbackModel() {
+                updateStatus("Loading fallback model...");
                 
                 const arObject = document.getElementById('ar-object');
                 arObject.innerHTML = '';
                 
-                // Create simple fallback model
                 const fallback = document.createElement('a-entity');
                 fallback.setAttribute('gltf-model', '#fallback-obj');
                 fallback.setAttribute('position', '0 1.5 -2');
                 fallback.setAttribute('scale', '0.5 0.5 0.5');
                 arObject.appendChild(fallback);
                 
-                // Add loaded event for fallback
                 fallback.addEventListener('model-loaded', () => {
-                    updateStatus("Fallback model loaded", 100);
-                    setTimeout(() => {
-                        loading.style.display = 'none';
-                    }, 500);
+                    updateStatus("Fallback model loaded");
+                    loading.style.display = 'none';
                 });
                 
                 fallback.addEventListener('error', () => {
-                    // Ultimate fallback - simple geometry
+                    // Ultimate fallback - simple box
                     arObject.innerHTML = '';
                     const box = document.createElement('a-box');
                     box.setAttribute('color', '#4285F4');
                     box.setAttribute('position', '0 1.5 -2');
-                    box.setAttribute('width', '1');
-                    box.setAttribute('height', '1');
-                    box.setAttribute('depth', '1');
                     arObject.appendChild(box);
-                    
-                    updateStatus("Using basic fallback", 100);
+                    updateStatus("Using basic fallback");
                     loading.style.display = 'none';
                 });
-            }
-
-            function handleModelError(error) {
-                log(`Model processing error: ${error.message}`, true);
-                log(error.stack, true);
-                initiateFallback();
-            }
-
-            function handleFatalError(error) {
-                updateStatus(`Fatal error: ${error.message}`, 0);
-                log(`FATAL ERROR: ${error.message}`, true);
-                if (error.stack) {
-                    log(error.stack, true);
-                }
-                showRetryButton();
             }
 
             // Global error handling
