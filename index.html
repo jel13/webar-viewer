@@ -2,24 +2,13 @@
 <html>
 <head>
     <title>AR Viewer</title>
-    <!-- Required meta tags -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    
-    <!-- Mobile-specific meta tags -->
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
-    <!-- PWA meta tags (optional) -->
-    <meta name="theme-color" content="#4285F4">
-    <meta name="description" content="Augmented Reality Viewer">
-    
-    <!-- Scripts and stylesheets come after -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js">
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background: black; }
         #loading {
             position: fixed;
             top: 0; left: 0;
@@ -46,24 +35,12 @@
             max-height: 30%;
             overflow-y: auto;
         }
-        #retry-btn {
-            padding: 12px 24px;
-            margin-top: 20px;
-            background: #4285F4;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            display: none;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
     <div id="loading">
         <h2>AR Experience</h2>
-        <p id="status">Initializing AR session...</p>
-        <button id="retry-btn">Try Again</button>
+        <p id="status">Initializing...</p>
     </div>
 
     <div id="debug"></div>
@@ -73,45 +50,34 @@
         arjs="sourceType: webcam; 
                debugUIEnabled: true; 
                detectionMode: mono_and_matrix; 
-               matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true; 
-                  precision: high; 
-                  antialias: true;"
+               matrixCodeType: 3x3;
+               cameraParametersUrl: https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat"
+        renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true"
+        background="color: transparent"
+        stats
     >
         <a-assets>
             <a-asset-item id="fallback-obj" src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@master/assets/models/wooden-crate/wooden-crate.gltf"></a-asset-item>
         </a-assets>
 
-        <a-camera gps-camera rotation-reader></a-camera>
+        <a-camera 
+            gps-camera 
+            rotation-reader
+            position="0 0 0"
+            look-controls="enabled: true"
+            wasd-controls="enabled: false">
+        </a-camera>
 
         <a-entity id="ar-object" position="0 1.5 -2"></a-entity>
 
         <script>
-            // Debugging setup
             const debug = document.getElementById('debug');
             const loading = document.getElementById('loading');
             const status = document.getElementById('status');
-            const retryBtn = document.getElementById('retry-btn');
-
-            // Updated WebGL check for A-Frame 1.4.0
-            function checkWebGLSupport() {
-                try {
-                    const canvas = document.createElement('canvas');
-                    return !!(
-                        window.WebGLRenderingContext &&
-                        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
-                    );
-                } catch (e) {
-                    return false;
-                }
-            }
 
             function log(message, isError = false) {
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString();
-                const ms = now.getMilliseconds().toString().padStart(3, '0');
                 const entry = document.createElement('div');
-                entry.textContent = `[${timeStr}.${ms}] ${message}`;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
                 entry.style.color = isError ? '#ff6b6b' : '#ffffff';
                 debug.appendChild(entry);
                 debug.scrollTop = debug.scrollHeight;
@@ -123,144 +89,65 @@
                 log(message);
             }
 
-            function showRetryButton() {
-                retryBtn.style.display = 'block';
-                retryBtn.onclick = () => window.location.reload();
-            }
-
-            function handleFatalError(error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                updateStatus(`Error: ${errorMessage}`);
-                log(`FATAL ERROR: ${errorMessage}`, true);
-                if (error instanceof Error && error.stack) {
-                    log(error.stack, true);
+            // Verify WebGL support
+            function hasWebGL() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    return !!window.WebGLRenderingContext && 
+                          (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+                } catch (e) {
+                    return false;
                 }
-                showRetryButton();
             }
 
             // Main initialization
             document.addEventListener('DOMContentLoaded', () => {
-                try {
-                    updateStatus("Checking system requirements...");
-                    
-                    // 1. Check WebGL support with updated method
-                    if (!checkWebGLSupport()) {
-                        throw new Error("WebGL is not supported in your browser. Please try with a different browser or device.");
-                    }
-
-                    // 2. Parse URL parameters
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const dataStr = decodeURIComponent(urlParams.get('data') || '[]');
-                    
-                    let arData;
-                    try {
-                        arData = JSON.parse(dataStr);
-                        if (!Array.isArray(arData)) throw new Error("Invalid data format");
-                    } catch (e) {
-                        throw new Error(`Failed to parse AR data: ${e.message}`);
-                    }
-
-                    if (arData.length === 0) {
-                        throw new Error("No AR data provided");
-                    }
-
-                    const modelData = arData[0];
-                    if (!modelData.file_url) {
-                        throw new Error("Missing model URL in data");
-                    }
-
-                    updateStatus("Initializing AR...");
-                    loadModel(modelData.file_url);
-
-                } catch (e) {
-                    handleFatalError(e);
+                updateStatus("Checking requirements...");
+                
+                if (!hasWebGL()) {
+                    log("WebGL not supported", true);
+                    status.innerHTML = "WebGL not supported<br>Try with Chrome or Firefox";
+                    return;
                 }
+
+                updateStatus("Requesting camera...");
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(() => initAR())
+                    .catch(e => {
+                        log(`Camera error: ${e.message}`, true);
+                        status.innerHTML = "Camera access denied<br>Please enable camera permissions";
+                    });
             });
 
-            function loadModel(modelUrl) {
+            function initAR() {
+                updateStatus("Initializing AR...");
                 const scene = document.querySelector('a-scene');
                 const arObject = document.getElementById('ar-object');
-                
-                // Clear previous content
-                arObject.innerHTML = '';
-                
-                // Create and configure loader
-                const loader = new THREE.GLTFLoader();
-                
-                loader.load(
-                    modelUrl,
-                    (gltf) => {
-                        try {
-                            arObject.object3D.add(gltf.scene);
-                            
-                            // Auto-scaling
-                            const box = new THREE.Box3().setFromObject(gltf.scene);
-                            const size = box.getSize(new THREE.Vector3());
-                            const maxDim = Math.max(size.x, size.y, size.z);
-                            const scale = 1 / Math.max(maxDim, 0.1);
-                            
-                            arObject.setAttribute('scale', `${scale} ${scale} ${scale}`);
-                            log(`Model loaded successfully. Scale: ${scale.toFixed(4)}`);
-                            
-                            loading.style.display = 'none';
-                        } catch (e) {
-                            handleModelError(e);
-                        }
-                    },
-                    (xhr) => {
-                        const percent = Math.round(xhr.loaded / xhr.total * 100);
-                        updateStatus(`Loading model... ${percent}%`);
-                    },
-                    (error) => {
-                        handleLoadError(error, modelUrl);
-                    }
-                );
+
+                scene.addEventListener('arjs-video-loaded', () => {
+                    log("AR.js video initialized");
+                    loadModel();
+                });
+
+                scene.addEventListener('renderstart', () => {
+                    loading.style.display = 'none';
+                    log("AR scene rendering");
+                });
             }
 
-            function handleLoadError(error, modelUrl) {
-                log(`Model load failed: ${error.message}`, true);
-                log(`Attempted URL: ${modelUrl}`, true);
-                loadFallbackModel();
-            }
-
-            function handleModelError(error) {
-                log(`Model processing error: ${error.message}`, true);
-                loadFallbackModel();
-            }
-
-            function loadFallbackModel() {
-                updateStatus("Loading fallback model...");
-                
+            function loadModel() {
+                updateStatus("Loading model...");
                 const arObject = document.getElementById('ar-object');
-                arObject.innerHTML = '';
                 
-                const fallback = document.createElement('a-entity');
-                fallback.setAttribute('gltf-model', '#fallback-obj');
-                fallback.setAttribute('position', '0 1.5 -2');
-                fallback.setAttribute('scale', '0.5 0.5 0.5');
-                arObject.appendChild(fallback);
+                // Create test object if no model specified
+                const box = document.createElement('a-box');
+                box.setAttribute('color', 'red');
+                box.setAttribute('position', '0 1.5 -2');
+                box.setAttribute('scale', '0.5 0.5 0.5');
+                arObject.appendChild(box);
                 
-                fallback.addEventListener('model-loaded', () => {
-                    updateStatus("Fallback model loaded");
-                    loading.style.display = 'none';
-                });
-                
-                fallback.addEventListener('error', () => {
-                    // Ultimate fallback - simple box
-                    arObject.innerHTML = '';
-                    const box = document.createElement('a-box');
-                    box.setAttribute('color', '#4285F4');
-                    box.setAttribute('position', '0 1.5 -2');
-                    arObject.appendChild(box);
-                    updateStatus("Using basic fallback");
-                    loading.style.display = 'none';
-                });
+                log("Default test object created");
             }
-
-            // Global error handling
-            window.addEventListener('error', (event) => {
-                handleFatalError(event.error);
-            });
         </script>
     </a-scene>
 </body>
