@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebAR Viewer</title>
+    <title>AR Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
         #loading {
@@ -30,26 +30,28 @@
             border-radius: 5px;
             font-size: 12px;
             z-index: 1001;
+            max-height: 30%;
+            overflow-y: auto;
         }
+        .arjs-loader { display: none !important; }
     </style>
 </head>
 <body>
     <div id="loading">
         <h2>AR Viewer</h2>
         <p id="status">Initializing...</p>
-        <div id="progress"></div>
     </div>
 
     <div id="debug"></div>
 
     <a-scene 
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
         renderer="logarithmicDepthBuffer: true; precision: high; antialias: true;"
     >
         <a-camera gps-camera rotation-reader></a-camera>
 
-        <a-entity id="ar-object" position="0 0 -2" scale="0.5 0.5 0.5">
+        <a-entity id="ar-object" position="0 1.5 -2" scale="1 1 1">
             <!-- 3D model will be placed here -->
         </a-entity>
 
@@ -58,17 +60,17 @@
             const debug = document.getElementById('debug');
             const loading = document.getElementById('loading');
             const status = document.getElementById('status');
-            const progress = document.getElementById('progress');
             
             function log(message) {
-                debug.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${message}</div>`;
-                console.log(message);
+                const entry = document.createElement('div');
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                debug.appendChild(entry);
                 debug.scrollTop = debug.scrollHeight;
+                console.log(message);
             }
 
-            function updateStatus(message, showProgress = false) {
+            function updateStatus(message) {
                 status.textContent = message;
-                progress.style.display = showProgress ? 'block' : 'none';
                 log(message);
             }
 
@@ -104,56 +106,63 @@
             });
 
             function initAR(obj) {
-                updateStatus("Initializing AR...", true);
+                updateStatus("Initializing AR...");
                 const scene = document.querySelector('a-scene');
                 const arObject = document.getElementById('ar-object');
 
                 // 3. Load 3D model
-                arObject.setAttribute('gltf-model', `url(${obj.file_url})`);
+                arObject.setAttribute('gltf-model', {
+                    src: `url(${obj.file_url})`,
+                    normalize: false // We'll handle scaling manually
+                });
                 
-                // 4. Set up event listeners
-                arObject.addEventListener('model-loaded', () => {
-                    updateStatus("Model loaded - detecting surfaces");
-                    
-                    // Auto-scale the model
-                    const box = new THREE.Box3().setFromObject(arObject.object3D);
+                // 4. Set up model-loaded handler with robust scaling
+                arObject.addEventListener('model-loaded', (e) => {
+                    // Calculate bounding box
+                    const box = new THREE.Box3().setFromObject(e.detail.model);
                     const size = box.getSize(new THREE.Vector3());
                     const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = 1.0 / maxDim;
                     
+                    log(`Original model size: ${maxDim.toFixed(2)} meters`);
+                    
+                    // Determine scale factor
+                    let scale;
+                    if (maxDim > 100) {
+                        // Emergency scaling for huge models
+                        scale = 0.5 / maxDim; // Force to ~0.5m size
+                        log(`Applying emergency scale: ${scale.toFixed(6)}`);
+                    } else {
+                        // Normal scaling
+                        scale = 1 / maxDim;
+                    }
+                    
+                    // Apply scale and position
                     arObject.setAttribute('scale', {
                         x: scale,
                         y: scale,
                         z: scale
                     });
                     
-                    log(`Model scaled to ${scale.toFixed(2)} (original size: ${maxDim.toFixed(2)}m)`);
+                    // Add visual bounding box helper (green wireframe)
+                    const helper = new THREE.BoxHelper(e.detail.model, 0x00ff00);
+                    helper.name = 'bbox-helper';
+                    e.detail.model.add(helper);
                     
-                    // Hide loading after short delay
+                    // Complete loading
                     setTimeout(() => {
                         loading.style.display = 'none';
-                    }, 1000);
+                        updateStatus("AR experience ready");
+                        log(`Final object scale: ${scale.toFixed(4)}`);
+                    }, 500);
                 });
 
+                // Error handling
                 arObject.addEventListener('error', (e) => {
                     throw new Error(`Model failed to load: ${e.detail.message}`);
                 });
 
-                // 5. Handle AR.js events
                 scene.addEventListener('arjs-unsupported', () => {
                     throw new Error("AR.js not supported on this device");
-                });
-
-                scene.addEventListener('arjs-camera-init', (e) => {
-                    log(`AR camera initialized: ${e.detail}`);
-                });
-
-                scene.addEventListener('markerFound', (e) => {
-                    log("Marker detected");
-                });
-
-                scene.addEventListener('markerLost', (e) => {
-                    log("Marker lost");
                 });
             }
 
