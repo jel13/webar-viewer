@@ -3,21 +3,22 @@
 <head>
     <title>WebAR Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
         #loading {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             color: white;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            font-family: Arial, sans-serif;
         }
         #debug {
             position: fixed;
@@ -30,117 +31,138 @@
             font-size: 12px;
             z-index: 1001;
         }
-        .arjs-loader { display: none !important; }
     </style>
 </head>
 <body>
     <div id="loading">
-        <h2>Loading AR Experience</h2>
-        <p id="status">Initializing camera...</p>
+        <h2>AR Viewer</h2>
+        <p id="status">Initializing...</p>
+        <div id="progress"></div>
     </div>
 
     <div id="debug"></div>
 
     <a-scene 
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true; precision: high;"
+        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        renderer="logarithmicDepthBuffer: true; precision: high; antialias: true;"
     >
-        <!-- Main camera -->
         <a-camera gps-camera rotation-reader></a-camera>
 
-        <!-- Object anchor -->
-        <a-entity id="ar-object" position="0 0 -2" scale="0.1 0.1 0.1">
-            <!-- Object will be placed here -->
+        <a-entity id="ar-object" position="0 0 -2" scale="0.5 0.5 0.5">
+            <!-- 3D model will be placed here -->
         </a-entity>
 
         <script>
-            // Debugging output
+            // Debugging setup
             const debug = document.getElementById('debug');
+            const loading = document.getElementById('loading');
+            const status = document.getElementById('status');
+            const progress = document.getElementById('progress');
+            
             function log(message) {
-                debug.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+                debug.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${message}</div>`;
                 console.log(message);
+                debug.scrollTop = debug.scrollHeight;
             }
 
-            document.addEventListener('DOMContentLoaded', () => {
-                const loading = document.getElementById('loading');
-                const status = document.getElementById('status');
-                const scene = document.querySelector('a-scene');
-                const arObject = document.getElementById('ar-object');
+            function updateStatus(message, showProgress = false) {
+                status.textContent = message;
+                progress.style.display = showProgress ? 'block' : 'none';
+                log(message);
+            }
 
+            // Main initialization
+            document.addEventListener('DOMContentLoaded', () => {
+                updateStatus("Starting AR session...");
+                
                 try {
-                    // Parse URL parameters
+                    // 1. Parse URL parameters
                     const urlParams = new URLSearchParams(window.location.search);
                     const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '[]'));
                     
-                    log("Scene initialized");
-                    log(`User agent: ${navigator.userAgent}`);
-
                     if (data.length === 0) {
-                        showError("No AR data provided");
-                        return;
+                        throw new Error("No AR data provided in URL");
                     }
 
                     const obj = data[0];
-                    log(`Loading object: ${obj.title || 'Untitled'}`);
-                    log(`Model URL: ${obj.file_url}`);
+                    log(`Loading object: ${JSON.stringify(obj)}`);
 
-                    // 1. Set up model
-                    arObject.setAttribute('gltf-model', {
-                        src: `url(${obj.file_url})`,
-                        normalize: true,
-                        fitToBox: true
-                    });
-
-                    // 2. Configure position (2m in front, 1.5m eye level)
-                    arObject.setAttribute('position', '0 1.5 -2');
-                    
-                    // 3. Set up event listeners
-                    arObject.addEventListener('model-loaded', (e) => {
-                        log("3D model loaded successfully");
-                        
-                        // Auto-scale the model
-                        const box = new THREE.Box3().setFromObject(e.detail.model);
-                        const size = box.getSize(new THREE.Vector3());
-                        const maxDim = Math.max(size.x, size.y, size.z);
-                        const scale = 0.5 / maxDim; // Normalize to 0.5m max dimension
-                        
-                        arObject.setAttribute('scale', {
-                            x: scale,
-                            y: scale,
-                            z: scale
+                    // 2. Verify camera access
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(() => {
+                            updateStatus("Camera access granted");
+                            initAR(obj);
+                        })
+                        .catch(e => {
+                            throw new Error(`Camera denied: ${e.message}`);
                         });
-                        
-                        loading.style.display = 'none';
-                        log(`Object scaled to ${scale.toFixed(2)}x`);
-                    });
-
-                    arObject.addEventListener('error', (e) => {
-                        showError(`Model failed to load: ${e.detail.message}`);
-                    });
-
-                    // 4. Handle scene events
-                    scene.addEventListener('arjs-unsupported', () => {
-                        showError("AR.js not supported on this device");
-                    });
-
-                    scene.addEventListener('arjs-camera-init', () => {
-                        log("AR camera initialized");
-                    });
 
                 } catch (e) {
-                    showError(`Initialization error: ${e.message}`);
-                    console.error(e);
+                    showError(`Initialization failed: ${e.message}`);
                 }
             });
 
+            function initAR(obj) {
+                updateStatus("Initializing AR...", true);
+                const scene = document.querySelector('a-scene');
+                const arObject = document.getElementById('ar-object');
+
+                // 3. Load 3D model
+                arObject.setAttribute('gltf-model', `url(${obj.file_url})`);
+                
+                // 4. Set up event listeners
+                arObject.addEventListener('model-loaded', () => {
+                    updateStatus("Model loaded - detecting surfaces");
+                    
+                    // Auto-scale the model
+                    const box = new THREE.Box3().setFromObject(arObject.object3D);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 1.0 / maxDim;
+                    
+                    arObject.setAttribute('scale', {
+                        x: scale,
+                        y: scale,
+                        z: scale
+                    });
+                    
+                    log(`Model scaled to ${scale.toFixed(2)} (original size: ${maxDim.toFixed(2)}m)`);
+                    
+                    // Hide loading after short delay
+                    setTimeout(() => {
+                        loading.style.display = 'none';
+                    }, 1000);
+                });
+
+                arObject.addEventListener('error', (e) => {
+                    throw new Error(`Model failed to load: ${e.detail.message}`);
+                });
+
+                // 5. Handle AR.js events
+                scene.addEventListener('arjs-unsupported', () => {
+                    throw new Error("AR.js not supported on this device");
+                });
+
+                scene.addEventListener('arjs-camera-init', (e) => {
+                    log(`AR camera initialized: ${e.detail}`);
+                });
+
+                scene.addEventListener('markerFound', (e) => {
+                    log("Marker detected");
+                });
+
+                scene.addEventListener('markerLost', (e) => {
+                    log("Marker lost");
+                });
+            }
+
             function showError(message) {
-                const loading = document.getElementById('loading');
                 loading.innerHTML = `
                     <h2 style="color: #ff4444">Error</h2>
                     <p>${message}</p>
                     <button onclick="window.location.reload()" 
-                            style="padding: 10px 20px; margin-top: 20px; 
+                            style="padding: 10px 20px; margin-top: 20px;
                                    background: #444; color: white; border: none; border-radius: 5px;">
                         Try Again
                     </button>
