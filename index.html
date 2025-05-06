@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: black; }
         #loading {
@@ -47,22 +47,29 @@
 
     <a-scene 
         vr-mode-ui="enabled: false"
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: true;"
+        arjs="trackingMethod: best;
+              sourceType: webcam;
+              debugUIEnabled: true;
+              trackingBackend: webarf;
+              detectionMode: mono_and_matrix;
+              matrixCodeType: 3x3;
+              cameraParametersUrl: https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat"
         renderer="logarithmicDepthBuffer: true; precision: high; antialias: true"
+        stats
     >
         <a-assets>
-            <a-asset-item id="model-gltf" src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@master/assets/models/wooden-crate/wooden-crate.gltf"></a-asset-item>
+            <a-asset-item id="fallback-obj" src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@master/assets/models/wooden-crate/wooden-crate.gltf"></a-asset-item>
         </a-assets>
 
-        <a-camera gps-camera rotation-reader></a-camera>
+        <a-camera 
+            gps-camera 
+            rotation-reader
+            position="0 0 0"
+            look-controls="enabled: true"
+            wasd-controls="enabled: false">
+        </a-camera>
 
-        <a-entity 
-            id="ar-object"
-            gps-entity-place="latitude: 37.7749; longitude: -122.4194;"
-            gltf-model="#model-gltf"
-            scale="1 1 1">
-        </a-entity>
+        <a-entity id="ar-object" position="0 1.5 -2"></a-entity>
 
         <script>
             const debug = document.getElementById('debug');
@@ -71,7 +78,7 @@
 
             function log(message, isError = false) {
                 const entry = document.createElement('div');
-                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                entry.textContent = [${new Date().toLocaleTimeString()}] ${message};
                 entry.style.color = isError ? '#ff6b6b' : '#ffffff';
                 debug.appendChild(entry);
                 debug.scrollTop = debug.scrollHeight;
@@ -83,6 +90,7 @@
                 log(message);
             }
 
+            // Verify WebGL support
             function hasWebGL() {
                 try {
                     const canvas = document.createElement('canvas');
@@ -93,6 +101,7 @@
                 }
             }
 
+            // Main initialization
             document.addEventListener('DOMContentLoaded', () => {
                 updateStatus("Checking requirements...");
                 
@@ -102,11 +111,11 @@
                     return;
                 }
 
-                updateStatus("Requesting camera and GPS...");
+                updateStatus("Requesting camera...");
                 navigator.mediaDevices.getUserMedia({ video: true })
                     .then(() => initAR())
                     .catch(e => {
-                        log(`Camera error: ${e.message}`, true);
+                        log(Camera error: ${e.message}, true);
                         status.innerHTML = "Camera access denied<br>Please enable camera permissions";
                     });
             });
@@ -114,11 +123,31 @@
             function initAR() {
                 updateStatus("Initializing AR...");
                 const scene = document.querySelector('a-scene');
+                const arObject = document.getElementById('ar-object');
 
-                scene.addEventListener('loaded', () => {
+                scene.addEventListener('arjs-video-loaded', () => {
+                    log("AR.js video initialized");
+                    loadModel();
+                });
+
+                scene.addEventListener('renderstart', () => {
                     loading.style.display = 'none';
                     log("AR scene rendering");
                 });
+            }
+
+            function loadModel() {
+                updateStatus("Loading model...");
+                const arObject = document.getElementById('ar-object');
+                
+                // Create test object if no model specified
+                const box = document.createElement('a-box');
+                box.setAttribute('color', 'red');
+                box.setAttribute('position', '0 1.5 -2');
+                box.setAttribute('scale', '0.5 0.5 0.5');
+                arObject.appendChild(box);
+                
+                log("Default test object created");
             }
         </script>
     </a-scene>
