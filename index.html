@@ -1,68 +1,15 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>AR GPS Scaling</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene
-      embedded
-      arjs="sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: false"
-    >
-      <a-entity 
-        id="target-model"
-        gps-entity-place="latitude: 14.435195; longitude: 120.988462"
-        gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb"
-        rotation="0 180 0"
-        animation-mixer
-        scale="5 5 5">
-      </a-entity>
-
-      <a-camera gps-camera rotation-reader></a-camera>
-    </a-scene>
-
-    <script>
-      // Model's GPS position
-      const modelLat = 14.435195;
-      const modelLon = 120.988462;
-
-      // Scaling constants
-      const minDistance = 5;   // meters
-      const maxDistance = 100; // meters
-      const minScale = 0.2;
-      const maxScale = 5;
-
-      const model = document.getElementById('target-model');
-
-      window.addEventListener('gps-camera-update-position', (e) => {
-        const userLat = e.detail.position.latitude;
-        const userLon = e.detail.position.longitude;
-
-        const distance = getDistance(userLat, userLon, modelLat, modelLon);
-
-        // Clamp distance
-        const clamped = Math.max(minDistance, Math.min(distance, maxDistance));
-
-        // Inverse scaling: closer = larger
-        const scaleFactor = maxScale - ((clamped - minDistance) / (maxDistance - minDistance)) * (maxScale - minScale);
-        model.setAttribute('scale', `${scaleFactor} ${scaleFactor} ${scaleFactor}`);
-      });
-
-      // Haversine formula to get distance in meters between two lat/lng
-      function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000; // Radius of Earth in meters
-        const toRad = (deg) => deg * (Math.PI / 180);
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a = 
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-      }
-    </script>
-  </body>
+<head>
+<title>AR.js A-Frame Location-based</title>
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex-location-only.js'></script>
+<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js'></script>
+</head>
+<body>
+<a-scene vr-mode-ui='enabled: false' arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false' renderer='antialias: true; alpha: true'>
+    <a-camera gps-new-camera='gpsMinDistance: 5'></a-camera>
+    <a-entity material='color: red' geometry='primitive: box' gps-new-entity-place="latitude: 14.435095; longitude: 120.988462" scale="10 10 10"></a-entity>
+</a-scene>
+</body>
 </html>
