@@ -5,23 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+    <script>
+      // Function to parse URL parameters
+      function getUrlParams() {
+        const params = {};
+        const queryString = window.location.search.substring(1);
+        const pairs = queryString.split('&');
+        
+        for (let i = 0; i < pairs.length; i++) {
+          const pair = pairs[i].split('=');
+          params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+        }
+        
+        return params;
+      }
+      
+      // Wait for DOM to load
+      document.addEventListener('DOMContentLoaded', function() {
+        const params = getUrlParams();
+        const latitude = parseFloat(params.latitude) || 0;
+        const longitude = parseFloat(params.longitude) || 0;
+        const modelUrl = params.modelUrl || '';
+        const rotationY = parseInt(params.rotationY) || 180;
+        const scale = params.scale || '1 1 1';
+        
+        // Create the scene dynamically
+        const scene = document.createElement('a-scene');
+        scene.setAttribute('vr-mode-ui', 'enabled: false');
+        scene.setAttribute('embedded', '');
+        scene.setAttribute('arjs', 'sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: true;');
+        
+        // Create the AR entity if modelUrl is valid
+        if (modelUrl) {
+          const entity = document.createElement('a-entity');
+          entity.setAttribute('gps-entity-place', `latitude: ${latitude}; longitude: ${longitude}`);
+          entity.setAttribute('gltf-model', `url(${modelUrl})`);
+          entity.setAttribute('scale', scale);
+          entity.setAttribute('rotation', `0 ${rotationY} 0`);
+          entity.setAttribute('animation-mixer', '');
+          scene.appendChild(entity);
+        }
+        
+        // Add camera
+        const camera = document.createElement('a-camera');
+        camera.setAttribute('gps-camera', '');
+        camera.setAttribute('rotation-reader', '');
+        scene.appendChild(camera);
+        
+        // Add to document
+        document.body.appendChild(scene);
+      });
+    </script>
   </head>
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene
-      vr-mode-ui="enabled: false"
-      embedded
-      arjs="sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: true;"
-    >
-      <!-- House Model placed ~10 meters north of current position -->
-      <a-entity 
-        gps-entity-place="latitude: 14.435195; longitude: 120.988462"
-        gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb"
-        scale="1 1 1"
-        rotation="0 180 0"
-        animation-mixer>
-      </a-entity>
-
-      <a-camera gps-camera rotation-reader></a-camera>
-    </a-scene>
-  </body>
+  <body style="margin: 0; overflow: hidden;"></body>
 </html>
