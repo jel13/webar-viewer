@@ -1,26 +1,21 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Location-based AR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>GPS AR Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.2/aframe/build/aframe-ar-nft-location.min.js"></script>
-    <script src="https://unpkg.com/aframe-gltf-part-component/dist/aframe-gltf-part-component.min.js"></script>
   </head>
-
   <body style="margin: 0; overflow: hidden;">
     <a-scene
-      vr-mode-ui="enabled: false"
       embedded
-      arjs="sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: false;"
-      renderer="logarithmicDepthBuffer: true;"
+      arjs="sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: true"
     >
-      <!-- Replace these with your actual coordinates -->
       <a-entity 
-        gps-entity-place="latitude: 14.435095; longitude: 120.988462;" 
-        gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb"
-        scale="5 5 5"
-        rotation="0 180 0"
+        gps-entity-place="latitude: 14.435095; longitude: 120.988462" 
+        gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb" 
+        scale="5 5 5" 
+        rotation="0 180 0" 
         animation-mixer>
       </a-entity>
 
