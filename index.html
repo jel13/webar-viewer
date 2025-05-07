@@ -1,61 +1,167 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>AR GPS House</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <title>WebAR Viewer</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+        #error {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+            padding: 20px;
+            text-align: center;
+        }
+        #close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1001;
+        }
+    </style>
+</head>
+<body>
+    <button id="close-btn" onclick="window.close()">×</button>
+    
+    <div id="loading">
+        <h2>Loading AR Experience</h2>
+        <p>Please wait while we prepare your AR view...</p>
+        <div class="spinner"></div>
+    </div>
+    
+    <div id="error">
+        <h2>Error Loading AR Content</h2>
+        <p id="error-message"></p>
+        <button onclick="window.location.reload()">Try Again</button>
+    </div>
+
+    <a-scene 
+        vr-mode-ui="enabled: false" 
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+        renderer="antialias: true; alpha: true; precision: mediump;"
+        loading-screen="enabled: false">
+        
+        <a-camera gps-new-camera="gpsMinDistance: 5"></a-camera>
+        
+        <!-- AR content will be dynamically added here -->
+    </a-scene>
+
     <script>
-      // Function to parse URL parameters
-      function getUrlParams() {
-        const params = {};
-        const queryString = window.location.search.substring(1);
-        const pairs = queryString.split('&');
-        
-        for (let i = 0; i < pairs.length; i++) {
-          const pair = pairs[i].split('=');
-          params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
-        }
-        
-        return params;
-      }
-      
-      // Wait for DOM to load
-      document.addEventListener('DOMContentLoaded', function() {
-        const params = getUrlParams();
-        const latitude = parseFloat(params.latitude) || 0;
-        const longitude = parseFloat(params.longitude) || 0;
-        const modelUrl = params.modelUrl || '';
-        const rotationY = parseInt(params.rotationY) || 180;
-        const scale = params.scale || '1 1 1';
-        
-        // Create the scene dynamically
-        const scene = document.createElement('a-scene');
-        scene.setAttribute('vr-mode-ui', 'enabled: false');
-        scene.setAttribute('embedded', '');
-        scene.setAttribute('arjs', 'sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: true;');
-        
-        // Create the AR entity if modelUrl is valid
-        if (modelUrl) {
-          const entity = document.createElement('a-entity');
-          entity.setAttribute('gps-entity-place', `latitude: ${latitude}; longitude: ${longitude}`);
-          entity.setAttribute('gltf-model', `url(${modelUrl})`);
-          entity.setAttribute('scale', scale);
-          entity.setAttribute('rotation', `0 ${rotationY} 0`);
-          entity.setAttribute('animation-mixer', '');
-          scene.appendChild(entity);
-        }
-        
-        // Add camera
-        const camera = document.createElement('a-camera');
-        camera.setAttribute('gps-camera', '');
-        camera.setAttribute('rotation-reader', '');
-        scene.appendChild(camera);
-        
-        // Add to document
-        document.body.appendChild(scene);
-      });
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                // Parse URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const arDataParam = urlParams.get('data');
+                
+                if (!arDataParam) {
+                    throw new Error('No AR data provided in URL');
+                }
+                
+                const arObjects = JSON.parse(decodeURIComponent(arDataParam));
+                
+                if (!Array.isArray(arObjects) || arObjects.length === 0) {
+                    throw new Error('Invalid AR data format');
+                }
+                
+                // Add each AR object to the scene
+                arObjects.forEach((obj, index) => {
+                    if (!obj.file_url || !obj.latitude || !obj.longitude) {
+                        console.warn('Skipping invalid AR object:', obj);
+                        return;
+                    }
+                    
+                    const entity = document.createElement('a-entity');
+                    entity.setAttribute('gps-new-entity-place', {
+                        latitude: obj.latitude,
+                        longitude: obj.longitude
+                    });
+                    
+                    // Check file extension to determine loader
+                    const fileExt = obj.file_url.split('.').pop().toLowerCase();
+                    
+                    if (fileExt === 'glb' || fileExt === 'gltf') {
+                        entity.setAttribute('gltf-model', `url(${obj.file_url})`);
+                    } else {
+                        // Default to box if format not recognized
+                        entity.setAttribute('geometry', 'primitive: box');
+                        entity.setAttribute('material', 'color: #4CC3D9');
+                    }
+                    
+                    entity.setAttribute('scale', '5 5 5');
+                    entity.setAttribute('animation', {
+                        property: 'rotation',
+                        to: '0 360 0',
+                        dur: 10000,
+                        easing: 'linear',
+                        loop: true
+                    });
+                    
+                    if (obj.title) {
+                        entity.setAttribute('text', {
+                            value: obj.title,
+                            align: 'center',
+                            color: 'white',
+                            width: 5,
+                            wrapCount: 20
+                        });
+                        entity.setAttribute('text-position', '0 2 0');
+                    }
+                    
+                    document.querySelector('a-scene').appendChild(entity);
+                });
+                
+                // Hide loading screen when scene is loaded
+                document.querySelector('a-scene').addEventListener('loaded', () => {
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    }, 1000);
+                });
+                
+            } catch (e) {
+                console.error('Error initializing AR:', e);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-message').textContent = e.message;
+                document.getElementById('error').style.display = 'flex';
+            }
+        });
     </script>
-  </head>
-  <body style="margin: 0; overflow: hidden;"></body>
+</body>
 </html>
