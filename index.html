@@ -1,61 +1,27 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>GPS AR Auto-Scale</title>
+    <title>AR GPS House</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
     <a-scene
+      vr-mode-ui="enabled: false"
       embedded
       arjs="sourceType: webcam; gpsMinAccuracy: 100; debugUIEnabled: true;"
     >
-      <a-entity
-        id="model"
-        gps-entity-place="latitude: 14.435095; longitude: 120.988462"
+      <!-- House Model placed ~10 meters north of current position -->
+      <a-entity 
+        gps-entity-place="latitude: 14.435195; longitude: 120.988462"
         gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb"
-        rotation="0 180 180"
-        animation-mixer
-        scale="1 1 1">
+        scale="1 1 1"
+        rotation="0 180 0"
+        animation-mixer>
       </a-entity>
 
       <a-camera gps-camera rotation-reader></a-camera>
     </a-scene>
-
-    <script>
-      const model = document.getElementById('model');
-      const baseDistance = 10; // meters
-      const baseScale = 1; // original scale
-
-      // Update scale based on distance
-      window.addEventListener('gps-camera-update-position', (e) => {
-        const userPos = e.detail.position;
-        const targetLat = 14.435095;
-        const targetLon = 120.988462;
-
-        const distance = computeDistance(userPos.latitude, userPos.longitude, targetLat, targetLon);
-
-        // Scale inversely proportional to distance, with a cap
-        const scaleFactor = Math.max(0.1, baseScale * (baseDistance / distance));
-        const scaleString = `${scaleFactor} ${scaleFactor} ${scaleFactor}`;
-        model.setAttribute('scale', scaleString);
-      });
-
-      // Haversine formula
-      function computeDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371000; // radius of Earth in meters
-        const toRad = (deg) => deg * Math.PI / 180;
-
-        const dLat = toRad(lat2 - lat1);
-        const dLon = toRad(lon2 - lon1);
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-      }
-    </script>
   </body>
 </html>
