@@ -1,25 +1,16 @@
 <!DOCTYPE html>
 <html>
-<head>
-<title>AR.js A-Frame Location-based</title>
-<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex-location-only.js'></script>
-<script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js'></script>
-</head>
-<body>
-<a-scene vr-mode-ui='enabled: false' arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false' renderer='antialias: true; alpha: true'>
-    <a-camera gps-new-camera='gpsMinDistance: 5'></a-camera>
-    <a-entity material='color: red' geometry='primitive: box' gps-new-entity-place="latitude: 14.435095; longitude: 120.988462" scale="10 10 10"></a-entity>
-</a-scene>
-</body>
-</html>
-<!DOCTYPE html>
-<html>
   <head>
     <title>AR GPS Scaling</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <!-- A-Frame itself -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+    
+    <!-- Pure three.js code that the A-Frame components use for location-based AR -->
+    <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex-location-only.js'></script>
+    
+    <!-- AR.js A-Frame components -->
+    <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js'></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
     <a-scene
@@ -30,9 +21,9 @@
         id="target-model"
         gps-entity-place="latitude: 14.435195; longitude: 120.988462"
         gltf-model="https://res.cloudinary.com/ds8esjc0y/raw/upload/v1746534479/dixc0age2tk7vr5yijig.glb"
-        rotation="50 150 0"
+        rotation="0 180 0"
         animation-mixer
-        scale="5 5 5">
+        scale="1 1 1">
       </a-entity>
 
       <a-camera gps-camera rotation-reader></a-camera>
