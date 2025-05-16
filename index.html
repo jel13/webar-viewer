@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <title>WebAR Viewer with TTS</title>
+    <title>WebAR Viewer</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
@@ -57,19 +57,6 @@
             cursor: pointer;
             z-index: 1001;
         }
-        #tts-btn {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 10px 20px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            z-index: 1001;
-            display: none; /* Hidden by default */
-        }
         .spinner {
             width: 40px;
             height: 40px;
@@ -85,8 +72,18 @@
 </head>
 <body>
     <button id="close-btn" onclick="window.history.back()">×</button>
-    <button id="tts-btn" onclick="speakDescription()">Speak Description</button>
     
+<!--     <div id="loading">
+        <h2>Loading AR Experience</h2>
+        <p>Please wait while we prepare your AR view...</p>
+        <div class="spinner"></div>
+    </div> -->
+    
+    <div id="error">
+        <h2>Error Loading AR Content</h2>
+        <p id="error-message"></p>
+        <button onclick="window.location.reload()">Try Again</button>
+    </div>
 
     <a-scene 
         vr-mode-ui="enabled: false" 
@@ -100,10 +97,6 @@
     </a-scene>
 
     <script>
-        // Store the current object for TTS
-        let currentARObject = null;
-        let speechSynthesis = window.speechSynthesis;
-        
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 // Parse URL parameters
@@ -119,9 +112,6 @@
                 if (!Array.isArray(arObjects) || arObjects.length === 0) {
                     throw new Error('Invalid AR data format');
                 }
-                
-                // Store the first object for TTS
-                currentARObject = arObjects[0];
                 
                 // Add each AR object to the scene
                 arObjects.forEach((obj, index) => {
@@ -141,12 +131,6 @@
                     
                     if (fileExt === 'glb' || fileExt === 'gltf') {
                         entity.setAttribute('gltf-model', `url(${obj.file_url})`);
-                        // Add error listener for model loading
-                        entity.addEventListener('model-error', () => {
-                            console.error('Failed to load model, using fallback');
-                            entity.setAttribute('geometry', 'primitive: box');
-                            entity.setAttribute('material', 'color: #4CC3D9');
-                        });
                     } else if (fileExt === 'usdz') {
                         // USDZ not directly supported in AR.js, fallback to primitive
                         entity.setAttribute('geometry', 'primitive: box');
@@ -183,12 +167,6 @@
                         entity.appendChild(textEntity);
                     }
                     
-                    // Add click event to select object for TTS
-                    entity.addEventListener('click', () => {
-                        currentARObject = obj;
-                        updateTTSButton();
-                    });
-                    
                     document.querySelector('a-scene').appendChild(entity);
                 });
                 
@@ -196,66 +174,16 @@
                 document.querySelector('a-scene').addEventListener('loaded', () => {
                     setTimeout(() => {
                         document.getElementById('loading').style.display = 'none';
-                        updateTTSButton(); // Show TTS button when AR is ready
                     }, 1000);
-                });
-                
-                // Handle camera permission errors
-                window.addEventListener('arjs-video-error', (err) => {
-                    console.error('Camera error:', err);
-                    showError('Camera access denied. Please allow camera permissions.');
                 });
                 
             } catch (e) {
                 console.error('Error initializing AR:', e);
-                showError(e.message);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-message').textContent = e.message;
+                document.getElementById('error').style.display = 'flex';
             }
         });
-        
-        function updateTTSButton() {
-            const ttsBtn = document.getElementById('tts-btn');
-            if (currentARObject && currentARObject.title) {
-                ttsBtn.style.display = 'block';
-                ttsBtn.textContent = `Speak: ${currentARObject.title}`;
-            } else {
-                ttsBtn.style.display = 'none';
-            }
-        }
-        
-        function speakDescription() {
-            if (!currentARObject) return;
-            
-            // Stop any current speech
-            speechSynthesis.cancel();
-            
-            // Create speech text
-            const speechText = currentARObject.title || 'AR Object';
-            const utterance = new SpeechSynthesisUtterance(speechText);
-            
-            // Configure speech
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            utterance.volume = 1;
-            
-            // Speak it
-            speechSynthesis.speak(utterance);
-            
-            // Update button during speech
-            const ttsBtn = document.getElementById('tts-btn');
-            ttsBtn.textContent = 'Speaking...';
-            ttsBtn.style.backgroundColor = '#f44336';
-            
-            utterance.onend = () => {
-                ttsBtn.textContent = `Speak: ${currentARObject.title}`;
-                ttsBtn.style.backgroundColor = '#4CAF50';
-            };
-        }
-        
-        function showError(message) {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('error-message').textContent = message;
-            document.getElementById('error').style.display = 'flex';
-        }
     </script>
 </body>
 </html>
